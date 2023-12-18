@@ -5,14 +5,16 @@ class exact_Riemann_solver(object):
 	def __init__(self, L):
 		self.L   = L
 
-	def init_shock_tube(self, t, x0, wl: np.array, wr: np.array):
+	def init_shock_tube(self, t, x0, wl: np.array, wr: np.array, cv_l, cv_r):
 		self.t   = t
 		self.x0  = x0
 		self.wl  = wl 
 		self.wr  = wr
+		self.cv_l = cv_l
+		self.cv_r = cv_r
 		self.case = 'shock-tube'
 
-	def init_shock_interface(self, t, Ma, xs, xb, w1, w2):
+	def init_shock_interface(self, t, Ma, xs, xb, w1, w2, cv_1, cv_2):
 		"""
 		w = [rho, u, p, gamma, pinf]
 		"""
@@ -30,13 +32,25 @@ class exact_Riemann_solver(object):
 		self.t   = t
 		self.xs0 = xs		# initial position of shock
 		self.xb0 = xb  		# initial position of bubble
+		self.cv_1 = cv_1
+		self.cv_2 = cv_2
 		self.case = 'shock-interface'
+
+	def export_solutions(self):
+		x, w = self.construct_sol(self.case)
+		N   = np.size(x)
+		sol = np.zeros((6,N))
+		# if (self.case == 'shock-tube'): sol = np.zeros((6,N))
+		sol[0 ,:] = x
+		sol[1:,:] = w
+		np.savetxt('solution.csv', sol)
 
 	def plot_solutions(self):
 		"""
 		plots the exact solutions
 		"""
 		x, w = self.construct_sol(self.case)
+		# if (self.case == 'shock-tube'): T = w[4:]
 
 		plt.rcParams['text.usetex'] = True
 		plt.rcParams["font.family"] = "Times New Roman"
@@ -44,6 +58,7 @@ class exact_Riemann_solver(object):
 		ax1 = fig.add_subplot(221)
 		ax2 = fig.add_subplot(222)
 		ax3 = fig.add_subplot(223)
+		ax4 = fig.add_subplot(224)
 
         # top-left
 		ax1.plot(x,w[0],c='k')
@@ -51,14 +66,22 @@ class exact_Riemann_solver(object):
 		ax1.grid()
     
         # top-right
-		ax2.plot(x,w[1],c='k')
-		ax2.set_ylabel(r'$u$', fontsize=15, fontweight = 'bold')
+		# ax2.plot(x,w[1],c='k')
+		# ax2.set_ylabel(r'$u$', fontsize=15, fontweight = 'bold')
+		# ax2.grid()
+		ax2.plot(x,w[4],c='k')
+		ax2.set_ylabel(r'$T$', fontsize=15, fontweight = 'bold')
 		ax2.grid()
-    
-        # bottom-left
-		ax3.plot(x,w[2],c='k')
-		ax3.set_ylabel(r'$p$', fontsize=15, fontweight = 'bold')
+
+		# bottom-left
+		ax3.plot(x,w[3],c='k')
+		ax3.set_ylabel(r'$\alpha$', fontsize=15, fontweight = 'bold')
 		ax3.grid()
+    
+        # bottom-right
+		ax4.plot(x,w[2],c='k')
+		ax4.set_ylabel(r'$p$', fontsize=15, fontweight = 'bold')
+		ax4.grid()
 		
 		plt.show()
 
@@ -67,7 +90,7 @@ class exact_Riemann_solver(object):
 
 		N = 1000
 		x = np.linspace(0, L, N)
-		w = np.zeros((3, N))
+		w = np.zeros((5, N))	# rho, u, p, alpha, T
 
 		if (case=='shock-tube'):
 			x0 = self.x0
@@ -99,36 +122,51 @@ class exact_Riemann_solver(object):
 					w[0,i] = rl
 					w[1,i] = ul
 					w[2,i] = pl
+					w[3,i] = 1.0
+					w[4,i] = (w[2,i]+pinf_l)/(gamma_l-1)/w[0,i]/self.cv_l;
 				elif(x[i] > x1 and x[i] < x2):
 					w[0,i] = rl * np.power(2/(gamma_l+1) + (gamma_l-1)/(gamma_l+1)/al*(ul - (x[i]-x0)/t), 2/(gamma_l-1))
 					w[1,i] = 2/(gamma_l+1) * (al + (gamma_l-1)/2*ul + (x[i]-x0)/t)
 					w[2,i] = (pl+pinf_l) * np.power(2/(gamma_l+1) + (gamma_l-1)/(gamma_l+1)/al*(ul - (x[i]-x0)/t), 2*gamma_l/(gamma_l-1)) - pinf_l
+					w[3,i] = 1.0
+					w[4,i] = (w[2,i]+pinf_l)/(gamma_l-1)/w[0,i]/self.cv_l;
 				elif(x[i] > x2 and x[i] < x3):
 					w[0,i] = self.r_star_l
 					w[1,i] = self.u_star
 					w[2,i] = self.p_star
+					w[3,i] = 1.0
+					w[4,i] = (w[2,i]+pinf_l)/(gamma_l-1)/w[0,i]/self.cv_l;
 				elif(x[i] > x3 and x[i] < x4):
 					w[0,i] = self.r_star_r
 					w[1,i] = self.u_star
-					w[2,i] = self.p_star	
+					w[2,i] = self.p_star
+					w[3,i] = 0.0
+					w[4,i] = (w[2,i]+pinf_r)/(gamma_r-1)/w[0,i]/self.cv_r;	
 				elif(x[i] > x4 and x[i] < x5):
 					w[0,i] = rr * np.power(2/(gamma_r+1) - (gamma_r-1)/(gamma_r+1)/ar*(ur - (x[i]-x0)/t), 2/(gamma_r-1))
 					w[1,i] = 2/(gamma_r+1) * (-ar + (gamma_l-1)/2*ur + (x[i]-x0)/t)
 					w[2,i] = (pr+pinf_r) * np.power(2/(gamma_r+1) - (gamma_r-1)/(gamma_r+1)/ar*(ur - (x[i]-x0)/t), 2*gamma_r/(gamma_r-1)) - pinf_r
+					w[3,i] = 0.0
+					w[4,i] = (w[2,i]+pinf_r)/(gamma_r-1)/w[0,i]/self.cv_r;
 				elif(x[i] > x5):
 					w[0,i] = rr
 					w[1,i] = ur
 					w[2,i] = pr
+					w[3,i] = 0.0
+					w[4,i] = (w[2,i]+pinf_r)/(gamma_r-1)/w[0,i]/self.cv_r;
 
 		elif (case=='shock-interface'):
 			# pre-shock ambient fluid
 			w[0, :] = self.w1[0]
 			w[1, :] = self.w1[1]
 			w[2, :] = self.w1[2]
+			w[3, :] = 1.0
+			w[4, :] = (self.w1[2]+self.w1[4])/(self.w1[3]-1)/self.w1[0]/self.cv_1
 
 			w[0, np.logical_and(x>self.xb0[0], x<self.xb0[1])] = self.w2[0]
 			w[1, np.logical_and(x>self.xb0[0], x<self.xb0[1])] = self.w2[1]
 			w[2, np.logical_and(x>self.xb0[0], x<self.xb0[1])] = self.w2[2]
+			w[4, np.logical_and(x>self.xb0[0], x<self.xb0[1])] = (self.w2[2]+self.w2[4])/(self.w2[3]-1)/self.w2[0]/self.cv_2
 
 			t1 = (self.xb0[0]-self.xs0)/self.Vs	# time of first collision
 
@@ -141,6 +179,9 @@ class exact_Riemann_solver(object):
 				w[0, x<xs] = self.w11[0]
 				w[1, x<xs] = self.w11[1]
 				w[2, x<xs] = self.w11[2]
+				w[4, x<xs] = (self.w11[2]+self.w11[4])/(self.w11[3]-1)/self.w11[0]/self.cv_1
+				# bubble fluid
+				w[3, np.logical_and(x>self.xb0[0], x<self.xb0[1])] = 0.0
 			else:
 				##	
 				# after first collision
@@ -164,15 +205,18 @@ class exact_Riemann_solver(object):
 				w[0, x<x10] = self.w11[0]
 				w[1, x<x10] = self.w11[1]
 				w[2, x<x10] = self.w11[2]
+				w[4, x<x10] = (self.w11[2]+self.w11[4])/(self.w11[3]-1)/self.w11[0]/self.cv_1
 				# solution region 1"
 				if (self.wave_l==0):	# reflected wave is shock
 					w[0, np.logical_and(x>x10, x<xb1)] = w12[0]
 					w[1, np.logical_and(x>x10, x<xb1)] = w12[1]
 					w[2, np.logical_and(x>x10, x<xb1)] = w12[2]
+					w[4, np.logical_and(x>x10, x<xb1)] = (w12[2]+w12[4])/(w12[3]-1)/w12[0]/self.cv_1
 				else:					# reflected wave is rarefaction
 					w[0, np.logical_and(x>x11, x<xb1)] = w12[0]
 					w[1, np.logical_and(x>x11, x<xb1)] = w12[1]
 					w[2, np.logical_and(x>x11, x<xb1)] = w12[2]
+					w[4, np.logical_and(x>x11, x<xb1)] = (w12[2]+w12[4])/(w12[3]-1)/w12[0]/self.cv_1
 
 					rl, ul, pl, gamma_l, pinf_l = self.w11[0], self.w11[1], self.w11[2], self.w11[3], self.w11[4]
 					al = np.sqrt(gamma_l*(pl+pinf_l)/rl)
@@ -181,12 +225,16 @@ class exact_Riemann_solver(object):
 					w[0, ir] = rl * np.power(2/(gamma_l+1) + (gamma_l-1)/(gamma_l+1)/al*(ul - (x[ir]-x0)/(t-t1)), 2/(gamma_l-1))
 					w[1, ir] = 2/(gamma_l+1) * (al + (gamma_l-1)/2*ul + (x[ir]-x0)/(t-t1))
 					w[2, ir] = (pl+pinf_l) * np.power(2/(gamma_l+1) + (gamma_l-1)/(gamma_l+1)/al*(ul - (x[ir]-x0)/(t-t1)), 2*gamma_l/(gamma_l-1)) - pinf_l
+					w[4, ir] = (w[2,ir]+pinf_l)/(gamma_l-1)/w[0,ir]/self.cv_1
 				
 				if (t < t2):
 					# solution region 2'
 					w[0, np.logical_and(x>xb1, x<xs)] = w21[0]
 					w[1, np.logical_and(x>xb1, x<xs)] = w21[1]
-					w[2, np.logical_and(x>xb1, x<xs)] = w21[2]	
+					w[2, np.logical_and(x>xb1, x<xs)] = w21[2]
+					w[4, np.logical_and(x>xb1, x<xs)] = (w21[2]+w21[4])/(w21[3]-1)/w21[0]/self.cv_2
+					# bubble fluid
+					w[3, np.logical_and(x>xb1, x<self.xb0[1])] = 0.0	
 				else:
 					##	
 					# after second collision
@@ -226,13 +274,16 @@ class exact_Riemann_solver(object):
 						w[1, np.logical_and(x>x21, x<xb2)] = w22[1]
 						w[2, np.logical_and(x>x21, x<xb2)] = w22[2]
 
-						rl, ul, pl, gamma_l, pinf_l = self.w21[0], self.w21[1], self.w21[2], self.w21[3], self.w21[4]
+						rl, ul, pl, gamma_l, pinf_l = w21[0], w21[1], w21[2], w21[3], w21[4]
 						al = np.sqrt(gamma_l*(pl+pinf_l)/rl)
 						ir = np.logical_and(x>x20, x<x21)
 						x0 = self.xb0[1]
 						w[0, ir] = rl * np.power(2/(gamma_l+1) + (gamma_l-1)/(gamma_l+1)/al*(ul - (x[ir]-x0)/(t-t1)), 2/(gamma_l-1))
 						w[1, ir] = 2/(gamma_l+1) * (al + (gamma_l-1)/2*ul + (x[ir]-x0)/(t-t1))
 						w[2, ir] = (pl+pinf_l) * np.power(2/(gamma_l+1) + (gamma_l-1)/(gamma_l+1)/al*(ul - (x[ir]-x0)/(t-t1)), 2*gamma_l/(gamma_l-1)) - pinf_l
+
+					# bubble fluid
+					w[3, np.logical_and(x>xb1, x<xb2)] = 0.0
 
 					# TODO: solutions after 3rd collision not included
 					if (t > t3): print('solutions not available!')
@@ -335,11 +386,15 @@ class exact_Riemann_solver(object):
 
 		# initial guess 
 		p_star = 0.5*(pl+pr)
+		# p_star = (np.sqrt(rl)*pl + np.sqrt(rr)*pr)/(np.sqrt(rl)+np.sqrt(rr))
 
 		# solve p_star using Newton-Raphson
+		# TODO: could lead to negative intermediate p_star
 		for i in range(n):
 			p_star_new = p_star - self.eqn_p_star(p_star,rl,ul,pl,gamma_l,pinf_l,rr,ur,pr,gamma_r,pinf_r)/ \
 								self.d_eqn_p_star(p_star,rl,ul,pl,gamma_l,pinf_l,rr,ur,pr,gamma_r,pinf_r)
+			if (p_star_new < 0):
+				p_star_new = min(pl, pr)
 			if (np.abs(p_star_new-p_star)/(p_star_new+p_star)/2 < tol): break
 			if (i==n): print("Unable to find p star")
 			p_star = p_star_new
